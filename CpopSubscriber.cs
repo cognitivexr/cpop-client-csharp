@@ -1,47 +1,77 @@
 using System;
-using System.Text;
+using System.Collections.Concurrent;
+using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Client.Options;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Bson;
 
 namespace cpop_client
 {
+    public class CpopServerOptions
+    {
+        public string Server { get; set; }
+        public int? Port { get; set; }
+    }
 
     public class CpopSubscriber
     {
-        public async void Subscribe()
+        public ConcurrentQueue<CpopData> Queue { get; }
+        private CpopServerOptions _options;
+        private CancellationTokenSource _cancellationTokenSource;
+        private IMqttClient _client;
+
+        public CpopSubscriber(ConcurrentQueue<CpopData> queue, CpopServerOptions options)
         {
+            Queue = queue;
+            _options = options;
+            _cancellationTokenSource = new CancellationTokenSource();
             var factory = new MqttFactory();
-            var mqttClient = factory.CreateMqttClient();
-
-            var options = new MqttClientOptionsBuilder()
-                .WithClientId("Client1")
-                .WithTcpServer("localhost")
-                .WithCleanSession()
-                .Build();
-
-            mqttClient.UseApplicationMessageReceivedHandler(e =>
-            {
-                Console.WriteLine("### RECEIVED APPLICATION MESSAGE ###");
-                Console.WriteLine($"+ Topic = {e.ApplicationMessage.Topic}");
-                Console.WriteLine($"+ Payload = {Encoding.UTF8.GetString(e.ApplicationMessage.Payload)}");
-                Console.WriteLine($"+ QoS = {e.ApplicationMessage.QualityOfServiceLevel}");
-                Console.WriteLine($"+ Retain = {e.ApplicationMessage.Retain}");
-                Console.WriteLine();
-
-                var message = new MqttApplicationMessageBuilder()
-                    .WithTopic("cpop")
-                    .WithPayload(Encoding.UTF8.GetString(e.ApplicationMessage.Payload))
-                    .Build();
-                Task.Run(() => mqttClient.PublishAsync(message));
-            });
-            
-            await mqttClient.ConnectAsync(options, CancellationToken.None);
-            await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("cpop").Build());
-
+            _client = factory.CreateMqttClient();
         }
 
+        public CpopSubscriber(CpopServerOptions options) : this(new ConcurrentQueue<CpopData>(), options)
+        {
+        }
+
+        public CpopSubscriber() : this(new CpopServerOptions {Server = "localhost"})
+        {
+        }
+
+        public void Unsubscribe()
+        {
+            _cancellationTokenSource.Cancel();
+        }
+
+        public void RegisterMessageHandler(Action<MqttApplicationMessageReceivedEventArgs> handler)
+        {
+            
+        }
+
+        public async void Subscribe()
+        {
+            var options = new MqttClientOptionsBuilder()
+                .WithClientId("CS-Client")
+                .WithTcpServer(_options.Server, _options.Port)
+                .WithCleanSession()
+                .Build();
+            _client.UseApplicationMessageReceivedHandler(DefaultCpopMessageHandler);
+            await _client.ConnectAsync(options, _cancellationTokenSource.Token);
+            await _client.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("cpop").Build());
+        }
+
+        protected void DefaultCpopMessageHandler(MqttApplicationMessageReceivedEventArgs e)
+        {
+            var payload = e.ApplicationMessage.Payload;
+
+            var ms = new MemoryStream(payload);
+            using var reader = new BsonReader(ms);
+            var serializer = new JsonSerializer();
+            var cpopData = serializer.Deserialize<CpopData>(reader);
+            Queue.Enqueue(cpopData);
+        }
+        
     }
 }
