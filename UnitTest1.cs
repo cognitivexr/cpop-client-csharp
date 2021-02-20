@@ -9,10 +9,12 @@ namespace cpop_client
         public void Setup()
         {
         }
-    
+
         [Test]
         public void Test1()
         {
+            new CpopSubscriber().Subscribe();
+            Console.WriteLine("exitting");
             Assert.Pass();
         }
     }
