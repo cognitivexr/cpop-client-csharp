@@ -22,6 +22,7 @@ namespace cpop_client
         private CpopServerOptions _options;
         private CancellationTokenSource _cancellationTokenSource;
         private IMqttClient _client;
+        private JsonSerializer serializer = new JsonSerializer();
 
         public CpopSubscriber(ConcurrentQueue<CpopData> queue, CpopServerOptions options)
         {
@@ -45,11 +46,6 @@ namespace cpop_client
             _cancellationTokenSource.Cancel();
         }
 
-        public void RegisterMessageHandler(Action<MqttApplicationMessageReceivedEventArgs> handler)
-        {
-            
-        }
-
         public async void Subscribe()
         {
             var options = new MqttClientOptionsBuilder()
@@ -68,10 +64,8 @@ namespace cpop_client
 
             var ms = new MemoryStream(payload);
             using var reader = new BsonReader(ms);
-            var serializer = new JsonSerializer();
             var cpopData = serializer.Deserialize<CpopData>(reader);
             Queue.Enqueue(cpopData);
         }
-        
     }
 }
