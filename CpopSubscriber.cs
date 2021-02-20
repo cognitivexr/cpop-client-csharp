@@ -11,7 +11,7 @@ namespace cpop_client
 
     public class CpopSubscriber
     {
-        async public void Subscribe()
+        public async void Subscribe()
         {
             var factory = new MqttFactory();
             var mqttClient = factory.CreateMqttClient();
@@ -21,19 +21,6 @@ namespace cpop_client
                 .WithTcpServer("localhost")
                 .WithCleanSession()
                 .Build();
-
-
-            await mqttClient.ConnectAsync(options, CancellationToken.None);
-
-            mqttClient.UseConnectedHandler(async e =>
-            {
-                Console.WriteLine("### CONNECTED WITH SERVER ###");
-
-                // Subscribe to a topic
-                await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("cpop").Build());
-
-                Console.WriteLine("### SUBSCRIBED ###");
-            });
 
             mqttClient.UseApplicationMessageReceivedHandler(e =>
             {
@@ -50,6 +37,10 @@ namespace cpop_client
                     .Build();
                 Task.Run(() => mqttClient.PublishAsync(message));
             });
+            
+            await mqttClient.ConnectAsync(options, CancellationToken.None);
+            await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("cpop").Build());
+
         }
 
     }
